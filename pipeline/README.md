@@ -19,8 +19,11 @@ so the old and new tools can work on one volume. Run it from the machine that ha
 
 ## Tasks (stages)
 
-`transform` tasks make files; `review` tasks look at output with a model and fix it. Order of a full volume:
-`chunk -> plan -> spec -> draw -> textscan -> vision -> build -> cast -> cover -> lab -> pdf -> publish` (`make` = spec through pdf).
+`transform` tasks make files; `review` tasks look at output with a model and fix it. `make` runs `spec` through `pdf`; `publish` is guarded and needs `--yes`.
+
+![The tasks of a volume in order: chunk, plan, spec, draw, textscan, vision, build, cast, cover, lab, pdf, publish. make runs spec through pdf; narrate can run any time after spec; publish needs --yes.](docs/stages.svg)
+
+Blue pills are `transform` tasks, red hexagons are `review` tasks (a model looks at the output and fixes it), the dashed yellow one is guarded. `narrate` only needs the page specs, so it can run any time after `spec`.
 
 | Task | Kind | Does | Needs |
 |---|---|---|---|
