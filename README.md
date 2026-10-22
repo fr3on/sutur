@@ -8,8 +8,13 @@ Sutur turns Arabic books into manga-style pages: black-and-white ink art, with t
 
 ## The pipeline
 
-[`pipeline/`](pipeline/) is the drawing pipeline as code: one task per stage (chunk, plan, spec, draw, textscan, vision, build, cast, cover, lab, pdf, narrate, publish) run per volume on a GPU box.
-Python 3.12, standard library core, tests that need no GPU. Start with [pipeline/README.md](pipeline/README.md).
+[![pipeline](https://github.com/fr3on/sutur/actions/workflows/pipeline.yml/badge.svg)](https://github.com/fr3on/sutur/actions/workflows/pipeline.yml)
+
+[`pipeline/`](pipeline/) is the drawing pipeline as code: one task per stage, run per volume on a GPU box. Python 3.12 and Pillow, tests that need no GPU.
+
+![The tasks of a volume in order: chunk, plan, spec, draw, textscan, vision, build, cast, cover, lab, pdf, publish. make runs spec through pdf; publish needs --yes.](pipeline/docs/stages.svg)
+
+Start with [pipeline/README.md](pipeline/README.md). Publishing to the site is deliberately guarded: it only runs with `--yes`, after you have looked at the review sheets.
 
 ## What we're building
 
