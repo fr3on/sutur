@@ -6,6 +6,11 @@ Sutur turns Arabic books into manga-style pages: black-and-white ink art, with t
 
 > This repository is just getting started. We're opening Sutur up so the people who care about Arabic books, manga, and AI drawing can follow along, share what works, and help with what doesn't.
 
+## The pipeline
+
+[`pipeline/`](pipeline/) is the drawing pipeline as code: one task per stage (chunk, plan, spec, draw, textscan, vision, build, cast, cover, lab, pdf, narrate, publish) run per volume on a GPU box.
+Python 3.12, standard library core, tests that need no GPU. Start with [pipeline/README.md](pipeline/README.md).
+
 ## What we're building
 
 - **A reader** for Arabic books: right-to-left, diacritics on or off, notes beside the pages, PDF and EPUB downloads, send to Kindle.

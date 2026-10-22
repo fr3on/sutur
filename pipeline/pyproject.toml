@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sutur-pipeline"
+version = "0.1.0"
+description = "Task framework for the Sutur manga pipeline: one task per kind of process (draw, scan, pdf, ...), run as a dependency graph per volume."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["Pillow>=10"]   # pictures, pdf and lettering; everything else is the standard library
+
+[project.optional-dependencies]
+images = ["Pillow>=10"]   # the pdf task and the test pictures
+dev = ["Pillow>=10", "ruff>=0.5", "mypy>=1.10"]
+
+[project.scripts]
+sutur-pipeline = "sutur_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sutur_pipeline = ["resources/*"]   # prompt_rules.txt and the remote publisher
+
+[tool.ruff]
+extend-exclude = ["src/sutur_pipeline/resources"]   # publish_remote.py runs on the production host, not here
+line-length = 160
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/sutur_pipeline/prompts.py" = ["E501"]   # model prompts are prose, not code
+"src/sutur_pipeline/tasks/vision.py" = ["E501"]
+"tests/*" = ["E501"]
+
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+exclude = ["src/sutur_pipeline/resources/"]

@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+# the workspace (pictures, pdfs, specs) belongs to the book repo, never to the framework
+comic/
+samples/

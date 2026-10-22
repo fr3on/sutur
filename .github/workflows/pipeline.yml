@@ -1,0 +1,27 @@
+name: pipeline
+
+on:
+  push:
+    paths: ["pipeline/**", ".github/workflows/pipeline.yml"]
+  pull_request:
+    paths: ["pipeline/**", ".github/workflows/pipeline.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the package (not editable, so a missing data file shows up here)
+        run: pip install ".[dev]"
+      - name: Lint
+        run: ruff check src tests
+      - name: Types
+        run: mypy
+      - name: Tests (against the installed package; the model servers are faked)
+        run: python -m unittest discover -s tests -t .
