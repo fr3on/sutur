@@ -1,9 +1,10 @@
 name: desktop
 
-# Builds the Mac app, signs and notarizes it, and publishes it as Sutur.dmg on a GitHub release.
-#   - push a tag like desktop-v0.1.0, or
-#   - run it by hand from the Actions tab and give the version.
-# Signing needs the repository secrets listed in apps/desktop/README.md. Without them the job stops before building.
+# Builds the desktop apps and publishes them on one GitHub release:
+#   Sutur.dmg (Mac, signed and notarized), Sutur-setup.exe (Windows), Sutur.AppImage and Sutur.deb (Linux).
+#   - push a tag like desktop-v0.1.0 to build all three, or
+#   - run it by hand from the Actions tab: give the version and, if you like, only some platforms.
+# The Mac job needs the Apple repository secrets listed in apps/desktop/README.md. Windows and Linux need none.
 
 on:
   push:
@@ -13,12 +14,40 @@ on:
       version:
         description: "Version to release, for example 0.1.0 (the tag becomes desktop-v0.1.0)"
         required: true
+      platforms:
+        description: "Which to build, any of: mac, windows, linux (comma separated)"
+        required: true
+        default: "mac,windows,linux"
 
 permissions:
   contents: write
 
 jobs:
+  release:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - name: Version and tag
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then v="${{ inputs.version }}"; else v="${GITHUB_REF_NAME#desktop-v}"; fi
+          case "$v" in ""|*[!0-9.]*) echo "::error::Version must look like 0.1.0, got '$v'"; exit 1;; esac
+          echo "version=$v" >> "$GITHUB_OUTPUT"; echo "tag=desktop-v$v" >> "$GITHUB_OUTPUT"
+      # The release is made once, up front, so the three build jobs can each add their file without racing to create it.
+      - name: Create the release if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${{ steps.v.outputs.tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "Sutur for desktop ${{ steps.v.outputs.version }}" --latest \
+            --notes "Mac (Apple Silicon and Intel, signed and notarized): open Sutur.dmg and drag Sutur to Applications. Windows 10 or later, 64-bit: run Sutur-setup.exe (one user, no administrator rights; the file is not code-signed yet, so Windows may show a SmartScreen warning). Linux 64-bit: make Sutur.AppImage executable and run it, or install Sutur.deb."
+
   mac:
+    needs: release
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'mac')
     runs-on: macos-14
     defaults:
       run:
@@ -41,16 +70,9 @@ jobs:
           done
           if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
 
-      - name: Version and tag
-        id: v
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then v="${{ inputs.version }}"; else v="${GITHUB_REF_NAME#desktop-v}"; fi
-          case "$v" in ""|*[!0-9.]*) echo "::error::Version must look like 0.1.0, got '$v'"; exit 1;; esac
-          echo "version=$v" >> "$GITHUB_OUTPUT"; echo "tag=desktop-v$v" >> "$GITHUB_OUTPUT"
-
       - name: Put the version in the app
         run: |
-          sed -i '' -E 's/"version": "[0-9.]+"/"version": "${{ steps.v.outputs.version }}"/' src-tauri/tauri.conf.json
+          sed -i '' -E 's/"version": "[0-9.]+"/"version": "${{ needs.release.outputs.version }}"/' src-tauri/tauri.conf.json
           grep '"version"' src-tauri/tauri.conf.json
 
       - uses: actions/setup-node@v4
@@ -86,16 +108,95 @@ jobs:
           cp "$(ls "$B"/dmg/*.dmg)" "$RUNNER_TEMP/Sutur.dmg"
           shasum -a 256 "$RUNNER_TEMP/Sutur.dmg" | tee "$RUNNER_TEMP/Sutur.dmg.sha256"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Sutur-dmg
-          path: ${{ runner.temp }}/Sutur.dmg*
-
-      - name: Publish the release
+      - name: Add to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ needs.release.outputs.tag }}" "$RUNNER_TEMP/Sutur.dmg" "$RUNNER_TEMP/Sutur.dmg.sha256" --clobber
+
+  windows:
+    needs: release
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'windows')
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - name: Put the version in the app
         run: |
-          tag="${{ steps.v.outputs.tag }}"
-          gh release view "$tag" >/dev/null 2>&1 \
-            && gh release upload "$tag" "$RUNNER_TEMP/Sutur.dmg" "$RUNNER_TEMP/Sutur.dmg.sha256" --clobber \
-            || gh release create "$tag" "$RUNNER_TEMP/Sutur.dmg" "$RUNNER_TEMP/Sutur.dmg.sha256" --target "$GITHUB_SHA" --title "Sutur for Mac ${{ steps.v.outputs.version }}" --notes "Signed and notarized. Apple Silicon and Intel. Open the disk image and drag Sutur to Applications." --latest
+          node -e "const f='src-tauri/tauri.conf.json',fs=require('fs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/\"version\": \"[0-9.]+\"/,'\"version\": \"${{ needs.release.outputs.version }}\"'))"
+          grep '"version"' src-tauri/tauri.conf.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: win-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+      # One installer for one user (no administrator rights). It is not code-signed yet.
+      - name: Build the installer
+        run: npx tauri build --bundles nsis
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          f="$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)"
+          cp "$f" "$RUNNER_TEMP/Sutur-setup.exe"
+          (cd "$RUNNER_TEMP" && sha256sum Sutur-setup.exe > Sutur-setup.exe.sha256 && cat Sutur-setup.exe.sha256)
+          gh release upload "${{ needs.release.outputs.tag }}" "$RUNNER_TEMP/Sutur-setup.exe" "$RUNNER_TEMP/Sutur-setup.exe.sha256" --clobber
+
+  linux:
+    needs: release
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.platforms, 'linux')
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - name: System libraries the window needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+      - name: Put the version in the app
+        run: |
+          node -e "const f='src-tauri/tauri.conf.json',fs=require('fs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/\"version\": \"[0-9.]+\"/,'\"version\": \"${{ needs.release.outputs.version }}\"'))"
+          grep '"version"' src-tauri/tauri.conf.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: linux-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+      - name: Build the AppImage and the .deb
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: npx tauri build --bundles appimage,deb
+      - name: Add to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          B=src-tauri/target/release/bundle
+          cp "$(ls $B/appimage/*.AppImage | head -1)" "$RUNNER_TEMP/Sutur.AppImage"
+          cp "$(ls $B/deb/*.deb | head -1)" "$RUNNER_TEMP/Sutur.deb"
+          (cd "$RUNNER_TEMP" && sha256sum Sutur.AppImage Sutur.deb > Sutur-linux.sha256 && cat Sutur-linux.sha256)
+          gh release upload "${{ needs.release.outputs.tag }}" "$RUNNER_TEMP/Sutur.AppImage" "$RUNNER_TEMP/Sutur.deb" "$RUNNER_TEMP/Sutur-linux.sha256" --clobber

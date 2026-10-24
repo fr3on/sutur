@@ -1,10 +1,18 @@
-# Sutur for Mac
+# Sutur for desktop
 
-A small [Tauri](https://tauri.app) window around [sutur.ink/app](https://sutur.ink/app): the reading app in its own window, with a menu (Home, Library, Reading now, Downloads), back and forward, zoom, and a title bar that drags the window. It holds no book data and no accounts of its own; you sign in on the site.
+A small [Tauri](https://tauri.app) window for Mac, Windows and Linux around [sutur.ink/app](https://sutur.ink/app): the reading app in its own window, with a menu (Home, Library, Reading now, Downloads), back and forward, zoom, and a title bar that drags the window. It holds no book data and no accounts of its own; you sign in on the site.
 
 ## Download
 
-Signed and notarized builds are on the [Releases](https://github.com/fr3on/sutur/releases) page (`Sutur.dmg`, Apple Silicon and Intel).
+On the [Releases](https://github.com/fr3on/sutur/releases) page:
+
+| Platform | File | Notes |
+|---|---|---|
+| Mac | `Sutur.dmg` | Apple Silicon and Intel, signed and notarized by Apple |
+| Windows 10 or later, 64-bit | `Sutur-setup.exe` | one user, no administrator rights; **not code-signed yet**, so Windows SmartScreen may warn |
+| Linux, 64-bit | `Sutur.AppImage`, `Sutur.deb` | the .deb needs WebKitGTK |
+
+The window title bar is native on Windows and Linux; the Mac keeps its overlay title bar.
 
 ## Build it yourself
 
@@ -18,9 +26,9 @@ npx tauri build            # unsigned, for this Mac only
 
 ## Release build in GitHub Actions
 
-[`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) builds, signs and notarizes the app on a Mac runner and publishes `Sutur.dmg` to a release. Run it from the Actions tab (give a version such as `0.1.0`) or push a tag like `desktop-v0.1.0`.
+[`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) creates one release and builds each platform on its own runner (Mac signed and notarized, Windows installer, Linux AppImage and .deb). Run it from the Actions tab (give a version such as `0.1.0` and, if you like, only some platforms such as `windows,linux`) or push a tag like `desktop-v0.1.0`.
 
-Add these under Settings > Secrets and variables > Actions (never in a file or a chat):
+The Mac job needs these secrets (Windows and Linux need none). Add them under Settings > Secrets and variables > Actions (never in a file or a chat):
 
 | Secret | What |
 |---|---|

@@ -13,15 +13,25 @@ fn zoom_by(win: &WebviewWindow, step: f64) {
     let _ = win.set_zoom(*z);
 }
 
+/// Opens a page in the system browser, with each platform's own command.
 fn open_in_browser(url: &str) {
+    #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
+
+/// The site draws its own title bar (back and forward beside the traffic lights) only on a Mac, where the window has an overlay title bar.
+/// Windows and Linux keep their native title bar, so the page must not draw one.
+const WINDOW_SCRIPT: &str = if cfg!(target_os = "macos") { "document.documentElement.classList.add('sutur-mac');" } else { "" };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri::plugin::Builder::<tauri::Wry, ()>::new("sutur-mac")
-            .js_init_script("document.documentElement.classList.add('sutur-mac');")
+            .js_init_script(WINDOW_SCRIPT)
             .build())
         .setup(|app| {
             let item = |id: &str, text: &str, key: Option<&str>| {
