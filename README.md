@@ -16,6 +16,10 @@ Sutur turns Arabic books into manga-style pages: black-and-white ink art, with t
 
 Start with [pipeline/README.md](pipeline/README.md). Publishing to the site is deliberately guarded: it only runs with `--yes`, after you have looked at the review sheets.
 
+## Apps
+
+[`apps/desktop/`](apps/desktop/) is the Mac app: the reading app in its own window. Builds are on the [Releases](https://github.com/fr3on/sutur/releases) page.
+
 ## What we're building
 
 - **A reader** for Arabic books: right-to-left, diacritics on or off, notes beside the pages, PDF and EPUB downloads, send to Kindle.

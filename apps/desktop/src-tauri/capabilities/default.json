@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default window permissions",
+  "windows": ["main"],
+  "remote": { "urls": ["https://sutur.ink/*"] },
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}
