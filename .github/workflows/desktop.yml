@@ -1,0 +1,101 @@
+name: desktop
+
+# Builds the Mac app, signs and notarizes it, and publishes it as Sutur.dmg on a GitHub release.
+#   - push a tag like desktop-v0.1.0, or
+#   - run it by hand from the Actions tab and give the version.
+# Signing needs the repository secrets listed in apps/desktop/README.md. Without them the job stops before building.
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, for example 0.1.0 (the tag becomes desktop-v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: apps/desktop
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the signing secrets (names only, values are never printed)
+        run: |
+          missing=""
+          for n in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            [ -n "$(printenv $n)" ] || missing="$missing $n"
+          done
+          if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
+
+      - name: Version and tag
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then v="${{ inputs.version }}"; else v="${GITHUB_REF_NAME#desktop-v}"; fi
+          case "$v" in ""|*[!0-9.]*) echo "::error::Version must look like 0.1.0, got '$v'"; exit 1;; esac
+          echo "version=$v" >> "$GITHUB_OUTPUT"; echo "tag=desktop-v$v" >> "$GITHUB_OUTPUT"
+
+      - name: Put the version in the app
+        run: |
+          sed -i '' -E 's/"version": "[0-9.]+"/"version": "${{ steps.v.outputs.version }}"/' src-tauri/tauri.conf.json
+          grep '"version"' src-tauri/tauri.conf.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: mac-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+
+      # Tauri imports the certificate from APPLE_CERTIFICATE, signs with the hardened runtime and sends the app to Apple for notarization.
+      - name: Build, sign and notarize (Apple Silicon and Intel in one app)
+        run: npx tauri build --target universal-apple-darwin
+
+      - name: Check the result
+        run: |
+          B=src-tauri/target/universal-apple-darwin/release/bundle
+          APP="$B/macos/Sutur.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl -a -vv "$APP"
+          xcrun stapler validate "$APP"
+          lipo -archs "$APP/Contents/MacOS/sutur-app"
+          cp "$(ls "$B"/dmg/*.dmg)" "$RUNNER_TEMP/Sutur.dmg"
+          shasum -a 256 "$RUNNER_TEMP/Sutur.dmg" | tee "$RUNNER_TEMP/Sutur.dmg.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sutur-dmg
+          path: ${{ runner.temp }}/Sutur.dmg*
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.v.outputs.tag }}"
+          gh release view "$tag" >/dev/null 2>&1 \
+            && gh release upload "$tag" "$RUNNER_TEMP/Sutur.dmg" "$RUNNER_TEMP/Sutur.dmg.sha256" --clobber \
+            || gh release create "$tag" "$RUNNER_TEMP/Sutur.dmg" "$RUNNER_TEMP/Sutur.dmg.sha256" --target "$GITHUB_SHA" --title "Sutur for Mac ${{ steps.v.outputs.version }}" --notes "Signed and notarized. Apple Silicon and Intel. Open the disk image and drag Sutur to Applications." --latest
